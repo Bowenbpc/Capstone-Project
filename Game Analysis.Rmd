@@ -1,0 +1,349 @@
+---
+title: "Game Analysis"
+author: "Bowen Cheng"
+date: "November 2, 2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(corrgram)
+library(gridExtra)
+```
+
+```{r}
+Games <- read.csv("D:/Ryerson Course/CKME136/Video_Games_Sales_as_at_22_Dec_2016.csv",stringsAsFactors = FALSE)
+str(Games)
+```
+
+```{r}
+###Data Preparation###
+#Remove attributes not part of the analysis
+Games$Name <- NULL
+Games$Platform <- NULL
+Games$Critic_Count <- NULL
+Games$User_Count <- NULL
+Games$Developer <- NULL
+Games$Critic_Score <- as.numeric(Games$Critic_Score)
+
+#Remove all rows with NA and missing values
+GamesCleaned <- na.omit(Games)
+GamesCleaned2 <- filter(GamesCleaned, Rating!='')
+GamesCleaned2$User_Score <- as.numeric(GamesCleaned2$User_Score)
+
+#Renaming the abbreviated ratings to their full description
+GamesCleaned2$Rating[GamesCleaned2$Rating=="RP"]="RatingPending"
+GamesCleaned2$Rating[GamesCleaned2$Rating=="EC"]="EarlyChildhood"
+GamesCleaned2$Rating[GamesCleaned2$Rating=="E"]="Everyone"
+GamesCleaned2$Rating[GamesCleaned2$Rating=="E10+"]="Everyone10+"
+GamesCleaned2$Rating[GamesCleaned2$Rating=="T"]="Teen"
+GamesCleaned2$Rating[GamesCleaned2$Rating=="M"]="Mature"
+GamesCleaned2$Rating[GamesCleaned2$Rating=="AO"]="AdultsOnly"
+GamesCleaned2$Rating[GamesCleaned2$Rating=="K-A"]="KidsToAdults"
+
+str(GamesCleaned2)
+summary(GamesCleaned2)
+GameCounts <- table(GamesCleaned2$Rating)
+xlim <- c(0, 8)
+ylim <- c(0, 1.1*max(GameCounts))
+bp <- barplot(GameCounts, main="Total Distribution of Games by Ratings", xlab="Rating", ylab ="Number of Games", xlim=xlim , ylim=ylim, col=rainbow(7))
+text(bp, 0, round(GameCounts, 1),pos=3)
+```
+
+```{r}
+g1 <- GamesCleaned2 %>% group_by(Rating) %>%
+      summarise(Sales = sum(NA_Sales)) %>%
+      arrange(desc(Sales)) %>%
+      ggplot(aes(x = reorder(Rating, -Sales), y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=7)) +
+        ylim(0, 1200) +
+        geom_text(aes(label=Sales), position=position_dodge(width=0.9), vjust=-0.5) +
+        xlab('Rating') + 
+        ylab('NA Sales') + 
+        ggtitle('North America') + 
+        theme_bw() + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+g2 <- GamesCleaned2 %>% group_by(Rating) %>%
+      summarise(Sales = sum(EU_Sales)) %>%
+      arrange(desc(Sales)) %>%
+      ggplot(aes(x = reorder(Rating, -Sales), y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=7)) +
+        ylim(0, 700) +
+        geom_text(aes(label=Sales), position=position_dodge(width=0.9), vjust=-0.5) +
+        xlab('Rating') + 
+        ylab('EU Sales') + 
+        ggtitle('European Union') + 
+        theme_bw() + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+g3 <- GamesCleaned2 %>% group_by(Rating) %>%
+      summarise(Sales = sum(JP_Sales)) %>%
+      arrange(desc(Sales)) %>%
+      ggplot(aes(x = reorder(Rating, -Sales), y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=7)) +
+        ylim(0, 250) +
+        geom_text(aes(label=Sales), position=position_dodge(width=0.9), vjust=-0.5) +
+        xlab('Rating') + 
+        ylab('JP Sales') + 
+        ggtitle('Japan') + 
+        theme_bw() + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+g4 <- GamesCleaned2 %>% group_by(Rating) %>%
+      summarise(Sales = sum(Other_Sales)) %>%
+      arrange(desc(Sales)) %>%
+      ggplot(aes(x = reorder(Rating, -Sales), y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=7)) +
+        ylim(0, 250) +
+        geom_text(aes(label=Sales), position=position_dodge(width=0.9), vjust=-0.5) +
+        xlab('Rating') + 
+        ylab('Other Sales') + 
+        ggtitle('Other Countries') + 
+        theme_bw() + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+grid.arrange(g1,g2,g3,g4,nrow=2,ncol=2,top="Sales Breakdown by Rating in Millions")
+
+SumRatingSale <- aggregate(cbind(Global_Sales,EU_Sales,NA_Sales,JP_Sales,Other_Sales)~Rating, data=GamesCleaned2, FUN=sum)
+SumRatingSale <- SumRatingSale[order(-SumRatingSale$Global_Sales),]
+SumRatingSale
+```
+
+```{r}
+GamesCleaned3 <- filter(GamesCleaned2, Year_of_Release!='N/A')
+g5 <- GamesCleaned3 %>% select(Rating,Year_of_Release,Global_Sales) %>% 
+      group_by(Rating,Year_of_Release) %>%
+      summarise(TotalSales=sum(Global_Sales)) %>%
+      arrange(desc(TotalSales)) %>%
+      ggplot(aes(x=Year_of_Release,y=TotalSales,group=Rating,fill=Rating)) + 
+      geom_bar(stat="identity",position =   "fill",alpha=0.7) +
+      theme(legend.position = "bottom",axis.text.x = element_text(angle=90))
+
+g6 <- GamesCleaned3 %>% select(Publisher,Global_Sales) %>%
+      group_by(Publisher) %>%
+      summarise(Total_Sales=sum(Global_Sales)) %>% 
+      arrange(desc(Total_Sales)) %>% 
+      head(10) %>%
+      ggplot(aes(x=factor(Publisher,level=Publisher),y=Total_Sales,fill=Publisher))+geom_bar(stat="identity") +
+      theme(axis.text.x=element_text(angle=90)) +
+      labs(x="Publisher",y="Total Sales in Millions",title="Top 10 Publishers")
+g5
+g6
+
+```
+
+```{r}
+p1 <- GamesCleaned3 %>% subset(Publisher=='Electronic Arts') %>% group_by(Rating) %>%
+      ggplot(aes(x = Rating)) + 
+        geom_bar(stat = 'count', fill = rainbow(n=4)) +
+        geom_text(stat = 'count', aes(label=..count..), vjust=-1) +
+        ylim(0, 600) +
+        xlab('Rating') + 
+        ylab('Number of Games') + 
+        ggtitle('Electronic Arts')
+p2 <- GamesCleaned3 %>% subset(Publisher=='Nintendo') %>% group_by(Rating) %>%
+      ggplot(aes(x = Rating)) + 
+        geom_bar(stat = 'count', fill = rainbow(n=4)) +
+        geom_text(stat = 'count', aes(label=..count..), vjust=-1) +
+        ylim(0, 250) +
+        xlab('Rating') + 
+        ylab('Number of Games') + 
+        ggtitle('Nintendo')
+p3 <- GamesCleaned3 %>% subset(Publisher=='Activision') %>% group_by(Rating) %>%
+      ggplot(aes(x = Rating)) + 
+        geom_bar(stat = 'count', fill = rainbow(n=4)) +
+        geom_text(stat = 'count', aes(label=..count..), vjust=-1) +
+        ylim(0, 300) +
+        xlab('Rating') + 
+        ylab('Number of Games') + 
+        ggtitle('Activision')
+p4 <- GamesCleaned3 %>% subset(Publisher=='Sony Computer Entertainment') %>% group_by(Rating) %>%
+      ggplot(aes(x = Rating)) + 
+        geom_bar(stat = 'count', fill = rainbow(n=5)) +
+        geom_text(stat = 'count', aes(label=..count..), vjust=-1) +
+        ylim(0, 200) +
+        xlab('Rating') + 
+        ylab('Number of Games') + 
+        ggtitle('Sony Computer Entertainment')
+grid.arrange(p1,p2,p3,p4,nrow=2,ncol=2,top="Top 4 Publishers Game Ratings Breakdown")
+```
+```{r}
+p5 <- GamesCleaned2 %>% subset(Publisher=='Electronic Arts') %>% group_by(Rating) %>%
+      summarise(Sales = sum(Global_Sales)) %>%
+      ggplot(aes(x = Rating, y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=4)) +
+        geom_text(stat = 'identity', aes(label=Sales), vjust=-1) +
+        ylim(0, 600) +
+        xlab('Rating') + 
+        ylab('Global Sales in Millions') + 
+        ggtitle('Electronic Arts')
+p6 <- GamesCleaned2 %>% subset(Publisher=='Nintendo') %>% group_by(Rating) %>%
+      summarise(Sales = sum(Global_Sales)) %>%
+      ggplot(aes(x = Rating, y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=4)) +
+        geom_text(stat = 'identity', aes(label=Sales), vjust=-1) +
+        ylim(0, 800) +
+        xlab('Rating') + 
+        ylab('Global Sales in Millions') + 
+        ggtitle('Nintendo')
+p7 <- GamesCleaned2 %>% subset(Publisher=='Activision') %>% group_by(Rating) %>%
+      summarise(Sales = sum(Global_Sales)) %>%
+      ggplot(aes(x = Rating, y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=4)) +
+        geom_text(stat = 'identity', aes(label=Sales), vjust=-1) +
+        ylim(0, 300) +
+        xlab('Rating') + 
+        ylab('Global Sales in Millions') + 
+        ggtitle('Activision')
+p8 <- GamesCleaned2 %>% subset(Publisher=='Sony Computer Entertainment') %>% group_by(Rating) %>%
+      summarise(Sales = sum(Global_Sales)) %>%
+      ggplot(aes(x = Rating, y = Sales)) + 
+        geom_bar(stat = 'identity', fill = rainbow(n=5)) +
+        geom_text(stat = 'identity', aes(label=Sales), vjust=-1) +
+        ylim(0, 200) +
+        xlab('Rating') + 
+        ylab('Global Sales in Millions') + 
+        ggtitle('Sony Computer Entertainment')
+grid.arrange(p5,p6,p7,p8,nrow=2,ncol=2,top="Top 4 Publishers Global Sales by Ratings")
+```
+
+
+```{r}
+g6 <- ggplot(GamesCleaned2, aes(x=Rating, y=Critic_Score, fill=Rating)) +geom_boxplot()
+g6
+```
+
+```{r}
+GamesCleaned4 <- filter(GamesCleaned2, Rating!='AdultsOnly' & Rating!='KidsToAdults' & Rating!='RatingPending')
+SumGenreSale <- aggregate(cbind(Global_Sales,EU_Sales,NA_Sales,JP_Sales,Other_Sales)~Genre, data=GamesCleaned4, FUN=sum)
+SumGenreSale <- SumGenreSale[order(-SumGenreSale$Global_Sales),]
+MeanRatingSale <- aggregate(cbind(Global_Sales,EU_Sales,NA_Sales,JP_Sales,Other_Sales)~Rating, data=GamesCleaned4, FUN=mean)
+MeanRatingSale <- MeanRatingSale[order(-MeanRatingSale$Global_Sales),]
+SumGenreSale
+MeanRatingSale
+```
+```{r}
+g7 <- MeanRatingSale %>% select(Rating,NA_Sales) %>% group_by(Rating) %>%
+      ggplot(aes(x=Rating, y=NA_Sales, fill=Rating)) + 
+        geom_bar(stat="identity") +
+        xlab('Rating') + 
+        ylab('NA Sales') + 
+        ggtitle('North America') + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+g8 <- MeanRatingSale %>% select(Rating,EU_Sales) %>% group_by(Rating) %>%
+      ggplot(aes(x=Rating, y=EU_Sales, fill=Rating)) + 
+        geom_bar(stat="identity") +
+        xlab('Rating') + 
+        ylab('EU Sales') + 
+        ggtitle('European Union') + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+g9 <- MeanRatingSale %>% select(Rating,JP_Sales) %>% group_by(Rating) %>%
+      ggplot(aes(x=Rating, y=JP_Sales, fill=Rating)) + 
+        geom_bar(stat="identity") +
+        xlab('Rating') + 
+        ylab('Japan Sales') + 
+        ggtitle('Japan') + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+g10 <- MeanRatingSale %>% select(Rating,Other_Sales) %>% group_by(Rating) %>%
+      ggplot(aes(x=Rating, y=Other_Sales, fill=Rating)) + 
+        geom_bar(stat="identity") +
+        xlab('Rating') + 
+        ylab('Other Sales') +
+        ggtitle('Other Countries') + 
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+grid.arrange(g7,g8,g9,g10,nrow=2,ncol=2,top="Mean Breakdown by Regions")
+```
+
+```{r}
+CorrData <- cor(GamesCleaned2[, 4:9])
+corrplot(CorrData, method ="number")
+```
+
+
+```{r}
+GamesCleaned2$ScoreRating <- ifelse(GamesCleaned2$Critic_Score >= 75, 'Good',
+                                ifelse(GamesCleaned2$Critic_Score >=50 & GamesCleaned2$Critic_Score < 75, 'Average',
+                                  ifelse(GamesCleaned2$Critic_Score < 50, 'Bad', 'N/A')))
+g10 <- GamesCleaned2 %>% group_by(ScoreRating) %>%
+       ggplot(aes(factor(ScoreRating, levels = c('Bad', 'Average', 'Good')))) + 
+        geom_bar(stat = 'count', fill = rainbow(n=3)) +
+        geom_text(stat = 'count', aes(label=..count..), vjust=-1) +
+        ylim(0, 4500) +
+        xlab('Score Rating') + 
+        ylab('Number of Games') + 
+        ggtitle('Game Ratings based on MetaCritic')
+g10
+```
+
+
+```{r}
+GamesCleaned2a <- filter(GamesCleaned2, Rating!='AdultsOnly' & Rating!='KidsToAdults' & Rating!='RatingPending')
+g10 <- GamesCleaned2 %>% 
+          ggplot() + 
+            geom_histogram(aes(x = Critic_Score), fill = 'green', alpha = 0.75, show.legend = T) + 
+            ggtitle('Histogram of Critic Scores') + xlab('Critic Score') +
+            theme_bw()
+g11 <- GamesCleaned2 %>% subset(Critic_Score & User_Score) %>%
+          ggplot(aes(x = as.numeric(User_Score), y = as.numeric(Critic_Score))) + 
+            geom_point(alpha = 0.5) +  
+            stat_smooth(method = 'lm', col = 'red', se = FALSE) + 
+            xlab('User Score') + ylab('Critic Score') + ggtitle('Critic Score vs User Score') + 
+            theme_bw()
+g12 <- GamesCleaned2a %>% 
+          ggplot(aes(x=User_Score,y=Critic_Score)) +
+            geom_point(aes(color=Rating),size=2,alpha=.5) + 
+            ggtitle('Breakdown of Ratings') + xlab('User Score') +
+            ylim(0,100) +
+            geom_smooth(method = "lm", size=.5,color="black", formula = y ~ x) + facet_wrap(~Rating)
+g10
+g11
+g12
+```
+
+```{r}
+GamesCleaned2b <- filter(GamesCleaned2, !is.na(User_Score))
+
+cor.test(GamesCleaned2$Critic_Score, GamesCleaned2$Global_Sales)
+cor.test(GamesCleaned2b$User_Score, GamesCleaned2b$Global_Sales)
+ 
+CriticScore_Sales <- lm(data = GamesCleaned2, Global_Sales ~ Critic_Score)
+summary(CriticScore_Sales)
+UserScore_Sales <- lm(data = GamesCleaned2b, Global_Sales ~ User_Score)
+summary(UserScore_Sales)
+```
+```{r}
+#Removing Outliers
+remove_outliers <- function(x, na.rm = TRUE, ...) {
+  qnt <- quantile(x, probs=c(.25, .75), na.rm = na.rm, ...)
+  H <- 1.5 * IQR(x, na.rm = na.rm)
+  y <- x
+  y[x < (qnt[1] - H)] <- NA
+  y[x > (qnt[2] + H)] <- NA
+  y
+}
+
+GamesClean_Outliers <- GamesCleaned2 %>%
+  mutate(Global_Sales = remove_outliers(Global_Sales))
+
+g13 <- GamesClean_Outliers %>%
+        ggplot(aes(x=Critic_Score,y=Global_Sales)) + 
+          geom_point(aes(color=Rating),size=3,alpha=.5) + 
+          ylim(0,1.5) + 
+          geom_smooth()
+g14 <- GamesClean_Outliers %>%
+        ggplot(aes(x=User_Score,y=Global_Sales)) + 
+          geom_point(aes(color=Rating),size=3,alpha=.5) + 
+          ylim(0,1.5) + 
+          geom_smooth()
+g13
+g14
+```
+
